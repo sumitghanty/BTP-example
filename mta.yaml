@@ -1,0 +1,145 @@
+_schema-version: "3.1"
+ID: mydashboard
+description: A simple CAP project.
+version: 1.0.0
+modules:
+- name: mydashboard-srv
+  type: nodejs
+  path: gen/srv
+  requires:
+  - name: mydashboard-db
+  provides:
+  - name: srv-api
+    properties:
+      srv-url: ${default-url}
+  parameters:
+    buildpack: nodejs_buildpack
+- name: mydashboard-db-deployer
+  type: hdb
+  path: gen/db
+  requires:
+  - name: mydashboard-db
+  parameters:
+    buildpack: nodejs_buildpack
+- name: mydashboard-destinations
+  type: com.sap.application.content
+  requires:
+  - name: mydashboard-html5-repo-host
+    parameters:
+      service-key:
+        name: cpapp-html5-repo-host-key
+  - name: srv-api
+  - name: mydashboard-destination
+    parameters:
+      content-target: true
+  parameters:
+    content:
+      instance:
+        destinations:
+        - Name: mydashboard-html5-repo-host
+          ServiceInstanceName: mydashboard-html5-repo-host
+          ServiceKeyName: mydashboard-html5-repo-host-key
+          sap.cloud.service: mydashboard.service
+        existing_destinations_policy: update
+  build-parameters:
+    no-source: true
+- name: mydashboard-app-content
+  type: com.sap.application.content
+  path: .
+  requires:
+  - name: mydashboard-repo-host
+    parameters:
+      content-target: true
+  build-parameters:
+    build-result: resources
+    requires:
+    - artifacts:
+      - comroitechrisk.zip
+      name: comroitechrisk
+      target-path: resources/
+    - artifacts:
+      - comroitechmitigation.zip
+      name: comroitechmitigation
+      target-path: resources/
+    - artifacts:
+      - comroitechsysteminstances.zip
+      name: comroitechsysteminstances
+      target-path: resources/
+- name: comroitechrisk
+  type: html5
+  path: app/risk
+  build-parameters:
+    build-result: dist
+    builder: custom
+    commands:
+    - npm install
+    - npm run build:cf
+    supported-platforms: []
+- name: comroitechmitigation
+  type: html5
+  path: app/mitigation
+  build-parameters:
+    build-result: dist
+    builder: custom
+    commands:
+    - npm install
+    - npm run build:cf
+    supported-platforms: []
+- name: comroitechsysteminstances
+  type: html5
+  path: app/instances
+  build-parameters:
+    build-result: dist
+    builder: custom
+    commands:
+    - npm install
+    - npm run build:cf
+    supported-platforms: []
+resources:
+- name: mydashboard-db
+  type: com.sap.xs.hdi-container
+  parameters:
+    service: hana
+    service-plan: hdi-shared
+  properties:
+    hdi-service-name: ${service-name}
+- name: mydashboard-destination
+  type: org.cloudfoundry.managed-service
+  parameters:
+    config:
+      HTML5Runtime_enabled: true
+    service: destination
+    service-plan: lite
+- name: mydashboard-html5-repo-host
+  type: org.cloudfoundry.managed-service
+  parameters:
+    config:
+      HTML5Runtime_enabled: true
+      init_data:
+        instance:
+          destinations:
+          - Authentication: NoAuthentication
+            Name: ui5
+            ProxyType: Internet
+            Type: HTTP
+            URL: https://ui5.sap.com
+          existing_destinations_policy: update
+      version: 1.0.0
+    service: destination
+    service-plan: lite
+- name: mydashboard-repo-host
+  type: org.cloudfoundry.managed-service
+  parameters:
+    service: html5-apps-repo
+    service-name: mydashboard-html5-srv
+    service-plan: app-host
+parameters:
+  deploy_mode: html5-repo
+  enable-parallel-deployments: true
+build-parameters:
+  before-all:
+  - builder: custom
+    commands:
+    - npm install --production
+    - npx -p @sap/cds-dk cds build --production
+    - npx rimraf gen/db/src/gen/data
